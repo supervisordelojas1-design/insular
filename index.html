@@ -1,0 +1,781 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#FBF2F1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1F1518" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Insular">
+<meta name="description" content="Acompanhamento de glicemia e insulina na gestação">
+<title>Insular</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Nunito:wght@400;600;700;800&display=swap">
+<style>
+/* Layout: one phone-width column (max 600px) — sticky date bar on top, fixed tab bar below,
+   and the day itself as a timeline of 13 steps in 4 blocks (manhã, almoço, jantar, noite). */
+:root{
+  --bg:#FBF2F1; --surface:#FFFFFF; --surface-2:#FBF0EE; --fg:#4A2E36; --muted:#8E6F78;
+  --line:#F1DEDC; --line-strong:#DCBEBB;
+  --accent:#C94F72; --accent-ink:#9C3457; --accent-soft:#FBE3E9; --on-accent:#FFFFFF;
+  --ok:#2B9A68; --ok-soft:#DEF4E8; --high:#D04A3E; --high-soft:#FCE3DF;
+  --low:#3E6BD8; --low-soft:#E2E9FB; --warn:#A8701C; --warn-soft:#FBEFD8;
+  --s1:#C94F72; --s2:#D9892C; --s3:#8A5BB8;
+  --shadow:0 1px 2px rgba(74,46,54,.05),0 8px 24px -12px rgba(74,46,54,.22);
+  --font-display:"Bricolage Grotesque","Avenir Next","Segoe UI",system-ui,sans-serif;
+  --font-body:"Nunito","Segoe UI",system-ui,-apple-system,sans-serif;
+  --radius:16px; --radius-s:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#1F1518; --surface:#2A1D22; --surface-2:#33242A; --fg:#F8ECEF; --muted:#C49DAA;
+    --line:#4A323B; --line-strong:#60434E;
+    --accent:#F08CA8; --accent-ink:#FFB9CB; --accent-soft:#4B2735; --on-accent:#2B1119;
+    --ok:#62D89C; --ok-soft:#1D3B2C; --high:#FF8C80; --high-soft:#4B2320;
+    --low:#9DB6FF; --low-soft:#243151; --warn:#F0C06A; --warn-soft:#42311B;
+    --s1:#F08CA8; --s2:#EBAB5E; --s3:#C39DF0;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.6);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#1F1518; --surface:#2A1D22; --surface-2:#33242A; --fg:#F8ECEF; --muted:#C49DAA;
+  --line:#4A323B; --line-strong:#60434E;
+  --accent:#F08CA8; --accent-ink:#FFB9CB; --accent-soft:#4B2735; --on-accent:#2B1119;
+  --ok:#62D89C; --ok-soft:#1D3B2C; --high:#FF8C80; --high-soft:#4B2320;
+  --low:#9DB6FF; --low-soft:#243151; --warn:#F0C06A; --warn-soft:#42311B;
+  --s1:#F08CA8; --s2:#EBAB5E; --s3:#C39DF0;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.6);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+.sync-dot{width:9px;height:9px;border-radius:50%;background:var(--line-strong);flex:none;margin-left:2px}
+.sync-dot.ok{background:var(--ok)}
+.sync-dot.pending,.sync-dot.syncing,.sync-dot.offline{background:var(--warn)}
+.sync-dot.syncing{animation:pulse 1s ease-in-out infinite}
+.sync-dot.error{background:var(--high)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.field.wide{width:100%;height:auto;padding:4px 10px}
+.field.wide input{width:100%;height:36px;font-weight:600;font-size:13px}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:15px;line-height:1.45;
+  -webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+h1,h2,h3{font-family:var(--font-display);margin:0;text-wrap:balance;letter-spacing:-.01em}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+
+/* ---------- top bar ---------- */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var(--surface);border-bottom:1px solid var(--line)}
+.top-inner{max-width:600px;margin:0 auto;padding-block:10px 8px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  display:flex;flex-direction:column;gap:6px}
+.brand{display:flex;align-items:center;gap:8px;min-width:0}
+.mark{width:26px;height:26px;flex:none}
+.brand-name{font-family:var(--font-display);font-weight:800;font-size:19px;letter-spacing:-.02em}
+.brand-sub{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-left:auto;font-weight:600}
+.datenav{display:flex;align-items:center;gap:4px}
+.icon-btn{width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:var(--surface);display:inline-flex;align-items:center;justify-content:center;font-size:22px;line-height:1;flex:none;color:var(--fg)}
+.icon-btn:active{background:var(--surface-2)}
+.date-label{flex:1;min-width:0;background:none;border:0;text-align:center;padding:2px 4px;border-radius:var(--radius-s);display:flex;flex-direction:column;align-items:center;gap:0}
+.date-label .dow{font-family:var(--font-display);font-weight:700;font-size:17px;line-height:1.15;text-transform:capitalize}
+.date-label .dmy{color:var(--muted);font-size:13px;line-height:1.2}
+.date-pick{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.today-btn{border:1px solid var(--accent);color:var(--accent-ink);background:var(--accent-soft);border-radius:999px;padding:5px 12px;font-weight:700;font-size:13px;flex:none}
+.view-title{font-size:20px;font-weight:800;padding-block:4px 2px}
+
+/* ---------- main ---------- */
+main{max-width:600px;margin:0 auto;padding-block:14px 110px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  display:flex;flex-direction:column;gap:14px;min-width:0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px;min-width:0}
+.card h2{font-size:17px;font-weight:700;margin-bottom:4px}
+.eyebrow{font-size:11.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+p{margin:0}
+
+/* summary */
+.summary{display:flex;flex-direction:column;gap:10px}
+.summary-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.summary-row .big{font-family:var(--font-display);font-weight:800;font-size:22px;letter-spacing:-.02em}
+.bar{height:8px;border-radius:999px;background:var(--surface-2);overflow:hidden;border:1px solid var(--line)}
+.bar > i{display:block;height:100%;background:var(--accent);border-radius:999px;transition:width .4s ease}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 10px;font-size:12.5px;font-weight:700;border:1px solid var(--line);background:var(--surface-2);color:var(--muted);line-height:1.3}
+.chip.ok{background:var(--ok-soft);color:var(--ok);border-color:transparent}
+.chip.high{background:var(--high-soft);color:var(--high);border-color:transparent}
+.chip.low{background:var(--low-soft);color:var(--low);border-color:transparent}
+.chip.warn{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+.chip.info{background:var(--accent-soft);color:var(--accent-ink);border-color:transparent}
+.chip.target{background:var(--surface-2);color:var(--muted)}
+.chip .dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
+
+/* timeline */
+.block{display:flex;flex-direction:column;gap:8px}
+.block-head{display:flex;align-items:baseline;gap:8px;padding-left:4px}
+.block-head h2{font-size:15px;font-weight:800}
+.steps{display:flex;flex-direction:column;gap:8px;position:relative}
+.step{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 12px 12px 12px;display:grid;grid-template-columns:36px minmax(0,1fr);gap:8px 10px;position:relative;transition:border-color .2s,box-shadow .2s}
+.step.next{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.step.done{border-color:var(--line)}
+.step.optional{background:var(--surface-2)}
+.step-ico{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--surface-2);color:var(--muted);border:1px solid var(--line);grid-row:span 2}
+.step.done .step-ico{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.step.next .step-ico{color:var(--accent);border-color:var(--accent)}
+.step-ico svg{width:19px;height:19px;display:block}
+.step-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;min-width:0}
+.step-title{font-weight:800;font-size:15px;line-height:1.25}
+.step-hint{color:var(--muted);font-size:12.5px;line-height:1.3;margin-top:1px}
+.step-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.field{display:flex;align-items:center;gap:6px;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius-s);padding:0 10px;height:42px;min-width:0}
+.field:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.field input{border:0;background:transparent;outline:none;height:100%;min-width:0;padding:0;font-weight:700}
+.field input[type=time]{width:92px;font-variant-numeric:tabular-nums}
+.field input[type=number]{width:62px;font-family:var(--font-display);font-size:19px;font-weight:700;text-align:right;-moz-appearance:textfield}
+.field input[type=number]::-webkit-outer-spin-button,.field input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.field .unit{color:var(--muted);font-size:12px;font-weight:700}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:var(--radius-s);height:42px;padding:0 14px;font-weight:800;font-size:14px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.soft{background:var(--accent-soft);border-color:transparent;color:var(--accent-ink)}
+.btn.ghost{background:transparent}
+.btn.danger{color:var(--high);border-color:var(--high-soft);background:var(--high-soft)}
+.btn.sm{height:34px;padding:0 12px;font-size:13px}
+.btn[aria-pressed="true"]{background:var(--ok);border-color:var(--ok);color:#fff}
+.step-status{grid-column:2;display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:0}
+.step-status:empty{display:none}
+.note-wrap textarea{width:100%;min-height:64px;border:1px solid var(--line);border-radius:var(--radius-s);background:var(--surface-2);padding:10px;resize:vertical;line-height:1.4}
+.note-wrap textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.row.between{justify-content:space-between}
+.inline-confirm{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.targets-line{color:var(--muted);font-size:12.5px}
+
+/* history */
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:3px;background:var(--surface-2);gap:2px}
+.seg button{border:0;background:transparent;border-radius:999px;padding:6px 12px;font-weight:800;font-size:13px;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--fg);box-shadow:var(--shadow)}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
+table.sheet{border-collapse:separate;border-spacing:0;font-size:12.5px;min-width:720px;width:100%}
+table.sheet th,table.sheet td{padding:6px 6px;text-align:center;border-bottom:1px solid var(--line);border-right:1px solid var(--line);white-space:nowrap;vertical-align:middle}
+table.sheet thead th{background:var(--surface-2);font-weight:800;position:sticky;top:0}
+table.sheet thead tr.grp th{font-family:var(--font-display);font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--accent-ink)}
+table.sheet thead tr.sub th{font-size:11px;color:var(--muted);font-weight:700}
+table.sheet .lim{display:block;font-size:10px;color:var(--muted);font-weight:700;letter-spacing:0;text-transform:none}
+table.sheet td.date,table.sheet th.date{position:sticky;left:0;background:var(--surface);text-align:left;font-weight:800;z-index:1;box-shadow:2px 0 0 var(--line)}
+table.sheet thead th.date{background:var(--surface-2);z-index:2}
+table.sheet td .v{font-family:var(--font-display);font-size:15px;font-weight:700;display:inline-block;min-width:34px;padding:1px 6px;border-radius:7px}
+table.sheet td .v.ok{background:var(--ok-soft);color:var(--ok)}
+table.sheet td .v.high{background:var(--high-soft);color:var(--high)}
+table.sheet td .v.low{background:var(--low-soft);color:var(--low)}
+table.sheet td .v.info{background:var(--surface-2)}
+table.sheet td .t{display:block;font-size:10.5px;color:var(--muted);margin-top:1px}
+table.sheet td.empty{color:var(--line-strong)}
+table.sheet tbody tr{cursor:pointer}
+table.sheet tbody tr:active td{background:var(--surface-2)}
+table.sheet td .ins{font-size:12px;font-weight:800;color:var(--accent-ink)}
+.days{display:flex;flex-direction:column;gap:10px}
+.day{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px;cursor:pointer;text-align:left;width:100%;display:flex;flex-direction:column;gap:8px}
+.day:active{background:var(--surface-2)}
+.day-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.day-head b{font-family:var(--font-display);font-size:15px;text-transform:capitalize}
+.day-grid{display:grid;grid-template-columns:62px repeat(3,minmax(0,1fr));gap:4px 6px;align-items:center;font-size:12.5px}
+.day-grid .lbl{color:var(--muted);font-weight:700;font-size:12px}
+.day-grid .cell{display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0}
+.day-grid .cell .v{font-family:var(--font-display);font-size:15px;font-weight:700;padding:1px 8px;border-radius:7px;min-width:36px;text-align:center}
+.day-grid .cell .v.ok{background:var(--ok-soft);color:var(--ok)}
+.day-grid .cell .v.high{background:var(--high-soft);color:var(--high)}
+.day-grid .cell .v.low{background:var(--low-soft);color:var(--low)}
+.day-grid .cell .v.info{background:var(--surface-2)}
+.day-grid .cell .v.none{color:var(--line-strong);background:transparent}
+.day-grid .cell .t{font-size:10.5px;color:var(--muted)}
+.day-grid .hdr{font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:center}
+.day-foot{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+/* evolution */
+.kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.kpi .k{font-family:var(--font-display);font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.1}
+.kpi .l{font-size:12px;color:var(--muted);font-weight:700}
+.kpi.ok .k{color:var(--ok)}.kpi.high .k{color:var(--high)}.kpi.low .k{color:var(--low)}
+.chart-wrap{width:100%;max-width:100%}
+.chart-wrap svg{width:100%;height:auto;display:block;max-width:100%}
+.chart-legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted);margin-top:6px}
+.chart-legend span{display:inline-flex;align-items:center;gap:5px;font-weight:700}
+.chart-legend i{width:14px;height:3px;border-radius:2px;display:inline-block}
+.moments{display:flex;flex-direction:column;gap:9px}
+.moment{display:grid;grid-template-columns:118px minmax(0,1fr) 64px;align-items:center;gap:8px;font-size:13px}
+.moment .lbl{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.moment .bar{height:10px}
+.moment .pct{text-align:right;font-weight:800;color:var(--muted);font-variant-numeric:tabular-nums}
+.empty-state{padding:24px 12px;text-align:center;color:var(--muted)}
+.empty-state b{color:var(--fg)}
+
+/* settings */
+.form{display:flex;flex-direction:column;gap:10px}
+.frow{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.frow label{font-weight:700;font-size:14px;flex:1 1 150px;min-width:0}
+.frow .sub{display:block;color:var(--muted);font-size:12px;font-weight:600}
+.frow .field{height:40px}
+.frow .field input[type=number]{font-size:16px;width:64px}
+.frow .field input[type=text]{width:150px;font-weight:700}
+.frow .field input[type=time]{width:86px}
+.switch{position:relative;width:46px;height:28px;border-radius:999px;background:var(--line-strong);border:0;flex:none;transition:background .2s}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.switch[aria-checked="true"]{background:var(--accent)}
+.switch[aria-checked="true"]::after{transform:translateX(18px)}
+.status-line{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.status-line .dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:none}
+.status-line.cloud .dot{background:var(--ok)}
+.status-line.local .dot{background:var(--warn)}
+textarea.backup{width:100%;min-height:80px;border:1px solid var(--line);border-radius:var(--radius-s);background:var(--surface-2);padding:10px;font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace;resize:vertical}
+.divider{height:1px;background:var(--line);margin-block:4px}
+.hr-note{font-size:12.5px;color:var(--muted);line-height:1.4}
+
+/* tabs */
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:9;background:var(--surface);border-top:1px solid var(--line);
+  padding-bottom:env(safe-area-inset-bottom,0px)}
+.tabs-inner{max-width:600px;margin:0 auto;display:flex;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.tab{flex:1;border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 4px 8px;font-size:11.5px;font-weight:800;color:var(--muted);border-radius:12px;letter-spacing:.01em}
+.tab svg{width:22px;height:22px;display:block}
+.tab[aria-current="page"]{color:var(--accent-ink)}
+.tab[aria-current="page"] .ti{background:var(--accent-soft)}
+.tab .ti{width:44px;height:28px;border-radius:999px;display:flex;align-items:center;justify-content:center;transition:background .2s}
+
+/* toast & sheet */
+#toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom,0px));transform:translate(-50%,10px);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:999px;font-weight:700;font-size:13.5px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:20;max-width:calc(100% - 32px);text-align:center}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+.sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:30;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:600px;padding-block:16px calc(16px + env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:10px;max-height:85vh}
+.sheet textarea{width:100%;flex:1;min-height:200px;border:1px solid var(--line);border-radius:var(--radius-s);background:var(--surface-2);padding:10px;font-size:12.5px;font-family:ui-monospace,Menlo,Consolas,monospace;white-space:pre;overflow:auto}
+
+@media (min-width:560px){
+  .kpis{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .step{grid-template-columns:40px minmax(0,1fr)}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header class="top" id="top">
+  <div class="top-inner">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 28S4 20.5 4 12.2C4 8.2 7.1 5.5 10.6 5.5c2.3 0 4.2 1.2 5.4 3 1.2-1.8 3.1-3 5.4-3C24.9 5.5 28 8.2 28 12.2 28 20.5 16 28 16 28z" fill="var(--accent)"/><path d="M8.5 16h4.2l2-4.2 2.8 8.4 2-4.2h4" fill="none" stroke="var(--on-accent)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="brand-name">Insular</span><span class="sync-dot" id="syncDot" hidden></span>
+      <span class="brand-sub" id="brandSub"></span>
+    </div>
+    <div class="datenav" id="datenav">
+      <button class="icon-btn" id="prevDay" aria-label="Dia anterior">‹</button>
+      <button class="date-label" id="dateLabel" aria-label="Escolher data"><span class="dow" id="dateDow"></span><span class="dmy num" id="dateDmy"></span></button>
+      <input class="date-pick" type="date" id="datePick" aria-hidden="true" tabindex="-1">
+      <button class="icon-btn" id="nextDay" aria-label="Próximo dia">›</button>
+      <button class="today-btn" id="todayBtn" hidden>Hoje</button>
+    </div>
+    <div class="view-title" id="viewTitle" hidden></div>
+  </div>
+</header>
+
+<main id="view"></main>
+
+<nav class="tabs" aria-label="Seções">
+  <div class="tabs-inner">
+    <button class="tab" data-view="hoje"><span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/><circle cx="12" cy="15" r="1.6" fill="currentColor" stroke="none"/></svg></span>Hoje</button>
+    <button class="tab" data-view="historico"><span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M3 14h18M9 9v11M15 9v11"/></svg></span>Histórico</button>
+    <button class="tab" data-view="evolucao"><span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18M4 16l5-6 4 3 7-8"/><circle cx="20" cy="5" r="1.5" fill="currentColor" stroke="none"/></svg></span>Evolução</button>
+    <button class="tab" data-view="ajustes"><span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.5"/><circle cx="9" cy="17" r="2.5"/></svg></span>Ajustes</button>
+  </div>
+</nav>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+'use strict';
+/* ====================== constants ====================== */
+const LS_KEY='insular.v1';
+const DEFAULTS={nome:'Daniele',insulina:'NPH',doseManha:22,horaInsManha:'07:00',doseJantar:22,metaJejum:90,metaPre:100,metaPos:140,hipo:70,mostrarNoite:true};
+const SEED_TS=1793745600000;
+/* dias 01/11 e 02/11 transcritos da folha de papel (não inventar aplicação de insulina: a folha não registra) */
+const SEED={};
+const STEPS=[
+ {id:'jejum',block:'manha',kind:'measure',target:'jejum',label:'Glicemia em jejum',hint:'ao acordar, antes de comer ou aplicar',icon:'sun'},
+ {id:'insManha',block:'manha',kind:'insulin',label:'Insulina da manhã',dose:'doseManha',hora:'horaInsManha',icon:'syringe'},
+ {id:'cafe',block:'manha',kind:'meal',label:'Café da manhã',hint:'marque a hora que começou a comer',icon:'coffee'},
+ {id:'aposCafe',block:'manha',kind:'measure',target:'pos',label:'1h após o café',after:'cafe',icon:'timer'},
+ {id:'preAlmoco',block:'almoco',kind:'measure',target:'pre',label:'Antes do almoço',icon:'drop'},
+ {id:'almoco',block:'almoco',kind:'meal',label:'Almoço',icon:'plate'},
+ {id:'aposAlmoco',block:'almoco',kind:'measure',target:'pos',label:'1h após o almoço',after:'almoco',icon:'timer'},
+ {id:'preJantar',block:'jantar',kind:'measure',target:'pre',label:'Antes do jantar',icon:'drop'},
+ {id:'insJantar',block:'jantar',kind:'insulin',label:'Insulina do jantar',dose:'doseJantar',icon:'syringe'},
+ {id:'jantar',block:'jantar',kind:'meal',label:'Jantar',icon:'moon'},
+ {id:'aposJantar',block:'jantar',kind:'measure',target:'pos',label:'1h após o jantar',after:'jantar',icon:'timer'},
+ {id:'dormir',block:'noite',kind:'measure',target:'none',label:'Antes de dormir',hint:'opcional',icon:'bed',optional:true},
+ {id:'madrugada',block:'noite',kind:'measure',target:'none',label:'Madrugada',hint:'opcional',icon:'stars',optional:true}
+];
+const STEP_BY_ID={};STEPS.forEach(s=>STEP_BY_ID[s.id]=s);
+const BLOCKS=[{id:'manha',label:'Manhã'},{id:'almoco',label:'Almoço'},{id:'jantar',label:'Jantar'},{id:'noite',label:'Noite',sub:'opcional'}];
+const ICONS={
+ sun:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>',
+ syringe:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l3-3M6 18l-2-2 9-9 5 5-9 9zM13 7l4 4M15 5l4 4M17 3l4 4M9 13l2 2M11 11l2 2"/></svg>',
+ coffee:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h12v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V9zM16 10h2a2.5 2.5 0 0 1 0 5h-2M7 3c0 1.5 1 1.5 1 3M11 3c0 1.5 1 1.5 1 3"/></svg>',
+ plate:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/></svg>',
+ timer:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>',
+ drop:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></svg>',
+ moon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>',
+ bed:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18V8M3 14h18v4M21 14v-3a2 2 0 0 0-2-2h-8v5"/><circle cx="7" cy="10.5" r="1.8"/></svg>',
+ stars:'<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 3l1.9 4.6 4.9.4-3.7 3.2 1.1 4.8L12 13.5 7.8 16l1.1-4.8L5.2 8l4.9-.4z"/><circle cx="19" cy="18" r="1.6"/><circle cx="5" cy="19" r="1.2"/></svg>',
+ check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.2 4.2L19 7"/></svg>'
+};
+
+/* ====================== state ====================== */
+let state={settings:Object.assign({},DEFAULTS),days:{},deleted:{},synced:{},settingsSynced:0,seeded:false};
+let currentDate=todayKey();
+let view='hoje';
+let histMode=window.innerWidth>=600?'tabela':'dias';
+let evoDays=14;
+
+/* ====================== helpers ====================== */
+const $=(s,el)=>(el||document).querySelector(s);
+function pad(n){return String(n).padStart(2,'0')}
+function todayKey(){const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}
+function parseKey(k){const p=k.split('-').map(Number);return new Date(p[0],p[1]-1,p[2],12,0,0)}
+function keyOf(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}
+function shiftKey(k,n){const d=parseKey(k);d.setDate(d.getDate()+n);return keyOf(d)}
+function nowHM(){const d=new Date();return pad(d.getHours())+':'+pad(d.getMinutes())}
+function addMin(hm,n){if(!/^\d\d:\d\d$/.test(hm))return'';const [h,m]=hm.split(':').map(Number);const t=(h*60+m+n+1440)%1440;return pad(Math.floor(t/60))+':'+pad(t%60)}
+function hmToMin(hm){if(!/^\d\d:\d\d$/.test(hm))return null;const [h,m]=hm.split(':').map(Number);return h*60+m}
+function fmtDate(k,style){const d=parseKey(k);try{return new Intl.DateTimeFormat('pt-BR',style).format(d)}catch(e){return k}}
+function shortDate(k){return k.slice(8,10)+'/'+k.slice(5,7)}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function clone(o){return JSON.parse(JSON.stringify(o))}
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove('show'),2200)}
+function limitFor(step,s){s=s||state.settings;if(step.target==='jejum')return s.metaJejum;if(step.target==='pre')return s.metaPre;if(step.target==='pos')return s.metaPos;return null}
+function statusOf(step,v,s){if(v==null||isNaN(v))return null;s=s||state.settings;if(v<s.hipo)return'low';const lim=limitFor(step,s);if(lim==null)return'info';return v<lim?'ok':'high'}
+const STATUS_LABEL={ok:'na meta',high:'acima da meta',low:'baixa (hipoglicemia)',info:'registrado'};
+function getDay(k){return state.days[k]||{}}
+function hasData(rec){return STEPS.some(st=>isDone(st,rec))||!!(rec&&rec.obs)}
+function isDone(st,rec){const r=rec[st.id]||{};if(st.kind==='measure')return r.v!=null;if(st.kind==='meal')return!!r.t;if(st.kind==='insulin')return r.done===true;return false}
+function visibleSteps(){return STEPS.filter(st=>state.settings.mostrarNoite||!st.optional)}
+
+/* ====================== storage: local ====================== */
+function loadLocal(){
+  let raw=null;try{raw=localStorage.getItem(LS_KEY)}catch(e){}
+  if(raw){try{const o=JSON.parse(raw);if(o&&typeof o==='object'){state.settings=Object.assign({},DEFAULTS,o.settings||{});state.days=o.days||{};state.deleted=o.deleted||{};state.synced=o.synced||{};state.settingsSynced=o.settingsSynced||0;state.seeded=!!o.seeded;if(o.histMode)histMode=o.histMode;if(o.evoDays)evoDays=o.evoDays}}catch(e){}}
+  if(!state.seeded){state.seeded=true;Object.keys(SEED).forEach(k=>{if(!state.days[k]&&!state.deleted[k]){state.days[k]=clone(SEED[k]);state.days[k].seed=true}});saveLocal()}
+}
+function saveLocal(){try{localStorage.setItem(LS_KEY,JSON.stringify({settings:state.settings,days:state.days,deleted:state.deleted,synced:state.synced,settingsSynced:state.settingsSynced,seeded:true,histMode,evoDays}))}catch(e){}}
+
+/* ====================== sincronização com a planilha Google (Apps Script) ====================== */
+const SYNC_URL_DEFAULT='';   // cole aqui a URL do app da web (termina em /exec) — ou configure em Ajustes
+const SYNC_TOKEN_DEFAULT=''; // a senha fica só em Ajustes (não publicar no repositório)
+const cfg={url:SYNC_URL_DEFAULT,token:SYNC_TOKEN_DEFAULT};
+const sync={state:'off',msg:'',last:0,syncing:false,again:false,timer:null,renderPending:false};
+function loadCfg(){try{const o=JSON.parse(localStorage.getItem(LS_KEY+'.cfg')||'{}');if(o.url)cfg.url=o.url;if(o.token)cfg.token=o.token}catch(e){}}
+function saveCfg(){try{localStorage.setItem(LS_KEY+'.cfg',JSON.stringify(cfg))}catch(e){}}
+function pushDay(k){const r=state.days[k];if(r&&hasData(r)){delete state.deleted[k];scheduleSync()}else pushDelete(k)}
+function pushDelete(k){delete state.days[k];delete state.synced[k];state.deleted[k]=Date.now();scheduleSync()}
+function pushSettings(){state.settings.updatedAt=Date.now();scheduleSync()}
+function pendingDays(){return Object.keys(state.days).filter(k=>{const r=state.days[k];return hasData(r)&&(r.updatedAt||0)>(state.synced[k]||0)})}
+function pendingCount(){return pendingDays().length+Object.keys(state.deleted).length+((state.settings.updatedAt||0)>(state.settingsSynced||0)?1:0)}
+function scheduleSync(ms){if(!cfg.url){setSyncUI('off');return}clearTimeout(sync.timer);sync.timer=setTimeout(()=>doSync('auto'),ms==null?1500:ms);setSyncUI('pending')}
+const FLAT_MAP=[['jejum_hora','jejum','t'],['jejum','jejum','v'],['ins_manha_ui','insManha','dose'],['ins_manha_hora','insManha','t'],['cafe_hora','cafe','t'],['apos_cafe_hora','aposCafe','t'],['apos_cafe','aposCafe','v'],['pre_almoco_hora','preAlmoco','t'],['pre_almoco','preAlmoco','v'],['almoco_hora','almoco','t'],['apos_almoco_hora','aposAlmoco','t'],['apos_almoco','aposAlmoco','v'],['pre_jantar_hora','preJantar','t'],['pre_jantar','preJantar','v'],['ins_jantar_ui','insJantar','dose'],['ins_jantar_hora','insJantar','t'],['jantar_hora','jantar','t'],['apos_jantar_hora','aposJantar','t'],['apos_jantar','aposJantar','v'],['dormir_hora','dormir','t'],['dormir','dormir','v'],['madrugada_hora','madrugada','t'],['madrugada','madrugada','v']];
+function flatten(k,rec){const o={date:k};FLAT_MAP.forEach(m=>{const r=rec[m[1]]||{};if(m[2]==='dose'){o[m[0]]=r.done?(r.dose!=null?r.dose:state.settings[STEP_BY_ID[m[1]].dose]):''}else{const v=r[m[2]];o[m[0]]=(v==null?'':v)}});o.obs=rec.obs||'';o.atualizado_em=rec.updatedAt||Date.now();return o}
+function unflatten(o){const rec={};FLAT_MAP.forEach(m=>{let v=o[m[0]];if(v===''||v==null)return;rec[m[1]]=rec[m[1]]||{};if(m[2]==='dose'){const n=Number(v);if(isNaN(n)){delete rec[m[1]];return}rec[m[1]].done=true;rec[m[1]].dose=n}else if(m[2]==='v'){const n=Number(v);if(isNaN(n))return;rec[m[1]].v=n}else{rec[m[1]].t=String(v)}});Object.keys(rec).forEach(k=>{if(!Object.keys(rec[k]).length)delete rec[k]});if(o.obs)rec.obs=String(o.obs);rec.updatedAt=Number(o.atualizado_em)||0;return rec}
+async function doSync(reason){
+  if(!cfg.url){setSyncUI('off');return}
+  if(sync.syncing){sync.again=true;return}
+  if(navigator.onLine===false){setSyncUI('offline');return}
+  sync.syncing=true;setSyncUI('syncing');
+  const days=pendingDays().map(k=>flatten(k,state.days[k]));
+  const deletes=Object.keys(state.deleted).map(k=>({date:k,deletedAt:state.deleted[k]}));
+  const settings=(state.settings.updatedAt||0)>(state.settingsSynced||0)?Object.assign({},state.settings):null;
+  try{
+    const res=await fetch(cfg.url,{method:'POST',body:JSON.stringify({token:cfg.token,action:'sync',days,deletes,settings})});
+    const j=await res.json();
+    if(!j||!j.ok)throw new Error(j&&j.error==='token'?'senha incorreta':'resposta inválida do script');
+    days.forEach(d=>{if(state.days[d.date]&&(state.days[d.date].updatedAt||0)<=d.atualizado_em)state.synced[d.date]=d.atualizado_em});
+    deletes.forEach(d=>{if(state.deleted[d.date]===d.deletedAt)delete state.deleted[d.date]});
+    if(settings)state.settingsSynced=settings.updatedAt;
+    applyServer(j);
+    sync.last=Date.now();saveLocal();setSyncUI('ok');
+  }catch(e){setSyncUI('error',(e&&e.message)||'falha de rede')}
+  sync.syncing=false;
+  if(sync.again){sync.again=false;doSync('again')}
+}
+function applyServer(j){
+  const serverDays={};(j.days||[]).forEach(d=>{if(d&&d.date)serverDays[d.date]=d});
+  let changed=false;
+  Object.keys(serverDays).forEach(k=>{
+    const S=unflatten(serverDays[k]);const L=state.days[k];const T=state.deleted[k]||0;
+    if(T&&T>=(S.updatedAt||0))return;
+    if(!L||(L.updatedAt||0)<(S.updatedAt||0)){state.days[k]=S;state.synced[k]=S.updatedAt||0;changed=true}
+    else if((L.updatedAt||0)===(S.updatedAt||0)){state.synced[k]=S.updatedAt||0}
+  });
+  Object.keys(state.days).forEach(k=>{
+    if(serverDays[k])return;
+    const L=state.days[k];
+    if(state.synced[k]&&(state.synced[k]||0)>=(L.updatedAt||0)){delete state.days[k];delete state.synced[k];changed=true}
+  });
+  if(j.settings&&(Number(j.settings.updatedAt)||0)>(state.settings.updatedAt||0)){state.settings=Object.assign({},DEFAULTS,j.settings);state.settingsSynced=state.settings.updatedAt;changed=true}
+  if(changed)requestRender();
+}
+function requestRender(){const a=document.activeElement;if(a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA')){sync.renderPending=true}else{sync.renderPending=false;render()}}
+function setSyncUI(st,msg){sync.state=st;sync.msg=msg||'';const dot=$('#syncDot');if(dot){dot.hidden=!cfg.url;dot.className='sync-dot '+st;dot.title=statusInfo().text}renderStatusLine()}
+function initSync(){
+  loadCfg();
+  if(cfg.url)doSync('load');else setSyncUI('off');
+  window.addEventListener('online',()=>doSync('online'));
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')doSync('visible')});
+  setInterval(()=>{if(document.visibilityState==='visible')doSync('timer')},5*60*1000);
+  document.addEventListener('focusout',()=>{if(sync.renderPending)setTimeout(()=>{if(sync.renderPending){const a=document.activeElement;if(!(a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'))){sync.renderPending=false;render()}}},150)});
+  if('serviceWorker' in navigator){try{navigator.serviceWorker.register('./sw.js')}catch(e){}}
+}
+
+/* ====================== mutations ====================== */
+function setField(k,stepId,field,value){
+  const rec=state.days[k]||(state.days[k]={});
+  const r=rec[stepId]||(rec[stepId]={});
+  r[field]=value;rec.updatedAt=Date.now();delete rec.seed;
+  if(!hasData(rec))delete state.days[k];
+  pushDay(k);saveLocal();
+}
+function setObs(k,text){const rec=state.days[k]||(state.days[k]={});rec.obs=text;rec.updatedAt=Date.now();delete rec.seed;if(!hasData(rec))delete state.days[k];pushDay(k);saveLocal()}
+function clearDay(k){pushDelete(k);saveLocal()}
+function setSetting(key,val){state.settings[key]=val;saveLocal();pushSettings()}
+
+/* ====================== rendering: shell ====================== */
+function renderBrand(){$('#brandSub').textContent=state.settings.nome||''}
+function setView(v){view=v;try{if(location.hash!=='#'+v)history.replaceState(null,'','#'+v)}catch(e){}render();window.scrollTo({top:0})}
+function render(){
+  renderBrand();
+  document.querySelectorAll('.tab').forEach(b=>{if(b.dataset.view===view)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
+  const dn=$('#datenav'),vt=$('#viewTitle');
+  if(view==='hoje'){dn.hidden=false;vt.hidden=true;renderDateNav();renderHoje()}
+  else{dn.hidden=true;vt.hidden=false;vt.textContent={historico:'Histórico',evolucao:'Evolução',ajustes:'Ajustes'}[view];
+    if(view==='historico')renderHistorico();else if(view==='evolucao')renderEvolucao();else renderAjustes()}
+}
+function renderDateNav(){
+  const isToday=currentDate===todayKey();
+  $('#dateDow').textContent=isToday?'Hoje':fmtDate(currentDate,{weekday:'long'});
+  $('#dateDmy').textContent=fmtDate(currentDate,{day:'numeric',month:'long'})+(isToday?' · '+fmtDate(currentDate,{weekday:'short'}):'');
+  $('#todayBtn').hidden=isToday;$('#datePick').value=currentDate;
+}
+
+/* ====================== HOJE ====================== */
+function stepCardHTML(st,rec,nextId){
+  const r=rec[st.id]||{};const s=state.settings;const done=isDone(st,rec);
+  const cls=['step',done?'done':'',st.id===nextId?'next':'',st.optional?'optional':''].filter(Boolean).join(' ');
+  let label=st.label;if(st.kind==='insulin')label=label.replace('Insulina',('Insulina '+(s.insulina||'')).trim());
+  let hint=st.hint||'';
+  let head='';
+  if(st.kind==='measure'){const lim=limitFor(st);head=lim!=null?'<span class="chip target">meta &lt; '+lim+'</span>':''}
+  if(st.kind==='insulin'){const dose=r.dose!=null?r.dose:s[st.dose];head='<span class="chip target">'+esc(dose)+' UI</span>';if(st.hora&&s[st.hora])hint='previsto '+esc(s[st.hora])}
+  if(st.after){const meal=(rec[st.after]||{}).t;if(meal){const p=addMin(meal,60);hint='previsto para '+p+(currentDate===todayKey()&&!done&&hmToMin(nowHM())>=hmToMin(p)?' · hora de medir':'')}else hint='marque a hora da refeição para calcular'}
+  let controls='';
+  const ds='data-step="'+st.id+'"';
+  if(st.kind==='measure'){
+    controls='<div class="field"><input type="time" id="t-'+st.id+'" '+ds+' data-field="t" value="'+esc(r.t||'')+'" aria-label="Horário"></div>'+
+      '<div class="field"><input type="number" inputmode="numeric" min="20" max="600" step="1" id="v-'+st.id+'" '+ds+' data-field="v" value="'+(r.v!=null?esc(r.v):'')+'" placeholder="—" aria-label="Resultado em mg/dL"><span class="unit">mg/dL</span></div>'+
+      '<button class="btn soft" type="button" '+ds+' data-act="agora">Agora</button>';
+  }else if(st.kind==='meal'){
+    controls='<div class="field"><input type="time" id="t-'+st.id+'" '+ds+' data-field="t" value="'+esc(r.t||'')+'" aria-label="Horário"></div>'+
+      '<button class="btn soft" type="button" '+ds+' data-act="agora">Agora</button>';
+  }else{
+    const dose=r.dose!=null?r.dose:s[st.dose];
+    controls='<button class="btn" type="button" '+ds+' data-act="apliquei" aria-pressed="'+(done?'true':'false')+'">'+(done?ICONS.check.replace('<svg','<svg width="16" height="16"')+'Aplicada':'Apliquei')+'</button>'+
+      '<div class="field"><input type="time" id="t-'+st.id+'" '+ds+' data-field="t" value="'+esc(r.t||'')+'" aria-label="Horário"></div>'+
+      '<div class="field"><input type="number" inputmode="numeric" min="0" max="200" step="1" id="d-'+st.id+'" '+ds+' data-field="dose" value="'+esc(dose)+'" aria-label="Dose em UI"><span class="unit">UI</span></div>';
+  }
+  return '<div class="'+cls+'" id="step-'+st.id+'">'+
+    '<div class="step-ico">'+(done?ICONS.check:ICONS[st.icon])+'</div>'+
+    '<div class="step-head"><div style="min-width:0"><div class="step-title">'+esc(label)+'</div>'+(hint?'<div class="step-hint">'+hint+'</div>':'')+'</div>'+head+'</div>'+
+    '<div class="step-controls">'+controls+'</div>'+
+    '<div class="step-status" id="status-'+st.id+'">'+statusChipHTML(st,r)+'</div>'+
+  '</div>';
+}
+function statusChipHTML(st,r){
+  if(st.kind==='measure'){const stt=statusOf(st,r.v);if(!stt)return'';return'<span class="chip '+stt+'"><span class="dot"></span>'+STATUS_LABEL[stt]+'</span>'+(stt==='low'?'<span class="small muted">confira a orientação da sua equipe médica</span>':'')}
+  if(st.kind==='insulin'&&r.done)return'<span class="chip info"><span class="dot"></span>'+esc(r.dose!=null?r.dose:state.settings[st.dose])+' UI'+(r.t?' às '+esc(r.t):'')+'</span>';
+  if(st.kind==='meal'&&r.t)return'<span class="chip info"><span class="dot"></span>às '+esc(r.t)+'</span>';
+  return'';
+}
+function nextStepId(rec){const st=visibleSteps().find(s=>!s.optional&&!isDone(s,rec));return st?st.id:null}
+function daySummaryHTML(k){
+  const rec=getDay(k);const steps=visibleSteps().filter(s=>!s.optional);
+  const done=steps.filter(s=>isDone(s,rec)).length;
+  const cnt={ok:0,high:0,low:0};
+  STEPS.forEach(s=>{if(s.kind!=='measure')return;const stt=statusOf(s,(rec[s.id]||{}).v);if(stt&&cnt[stt]!=null)cnt[stt]++});
+  const chips=[cnt.ok?'<span class="chip ok"><span class="dot"></span>'+cnt.ok+' na meta</span>':'',cnt.high?'<span class="chip high"><span class="dot"></span>'+cnt.high+' acima</span>':'',cnt.low?'<span class="chip low"><span class="dot"></span>'+cnt.low+(cnt.low>1?' baixas':' baixa')+'</span>':''].join('');
+  const s=state.settings;
+  return'<div class="card summary" id="daySummary"><div class="summary-row"><span class="big num">'+done+' de '+steps.length+'</span><span class="eyebrow">registros do dia</span></div>'+
+    '<div class="bar" aria-hidden="true"><i style="width:'+(steps.length?Math.round(done/steps.length*100):0)+'%"></i></div>'+
+    (chips?'<div class="chips">'+chips+'</div>':'')+
+    '<div class="targets-line">Metas: jejum &lt; '+s.metaJejum+' · antes das refeições &lt; '+s.metaPre+' · 1h após &lt; '+s.metaPos+' · baixa &lt; '+s.hipo+' mg/dL</div></div>';
+}
+function renderHoje(){
+  const k=currentDate;const rec=getDay(k);const nextId=nextStepId(rec);
+  let html=daySummaryHTML(k);
+  BLOCKS.forEach(b=>{
+    if(b.id==='noite'&&!state.settings.mostrarNoite)return;
+    const steps=STEPS.filter(s=>s.block===b.id);
+    html+='<section class="block"><div class="block-head"><h2>'+b.label+'</h2>'+(b.sub?'<span class="small muted">'+b.sub+'</span>':'')+'</div><div class="steps">'+steps.map(s=>stepCardHTML(s,rec,nextId)).join('')+'</div></section>';
+  });
+  html+='<div class="card note-wrap"><div class="eyebrow" style="margin-bottom:6px">Observações do dia</div><textarea id="obs" placeholder="Ex.: comi fora, passei mal, esqueci a medição…">'+esc(rec.obs||'')+'</textarea></div>';
+  html+='<div class="row between" id="dayActions"><button class="btn sm ghost" type="button" data-act="copy-day">Copiar este dia</button>'+(hasData(rec)?'<button class="btn sm ghost" type="button" data-act="clear-day" style="color:var(--high)">Limpar este dia</button>':'')+'</div>';
+  $('#view').innerHTML=html;
+}
+function patchStep(id){const st=STEP_BY_ID[id];if(!st)return;const el=$('#step-'+id);if(!el)return;const rec=getDay(currentDate);const tmp=document.createElement('div');tmp.innerHTML=stepCardHTML(st,rec,nextStepId(rec));el.replaceWith(tmp.firstElementChild)}
+function patchAfterChange(id){
+  const rec=getDay(currentDate);const nextId=nextStepId(rec);
+  patchStep(id);
+  const dep=STEPS.find(s=>s.after===id);if(dep)patchStep(dep.id);
+  document.querySelectorAll('.step').forEach(el=>{const sid=el.id.replace('step-','');el.classList.toggle('next',sid===nextId)});
+  const sum=$('#daySummary');if(sum){const tmp=document.createElement('div');tmp.innerHTML=daySummaryHTML(currentDate);sum.replaceWith(tmp.firstElementChild)}
+  const act=$('#dayActions');if(act){const btn=act.querySelector('[data-act="clear-day"]');if(hasData(rec)&&!btn)act.insertAdjacentHTML('beforeend','<button class="btn sm ghost" type="button" data-act="clear-day" style="color:var(--high)">Limpar este dia</button>');if(!hasData(rec)&&btn)btn.remove()}
+}
+
+/* ====================== HISTÓRICO ====================== */
+function sortedKeys(desc){return Object.keys(state.days).filter(k=>hasData(state.days[k])).sort((a,b)=>desc?(a<b?1:-1):(a<b?-1:1))}
+function cellHTML(st,rec,withTime){const r=rec[st.id]||{};if(r.v==null)return'<td class="empty">—</td>';const stt=statusOf(st,r.v)||'info';return'<td><span class="v '+stt+'">'+esc(r.v)+'</span>'+(withTime&&r.t?'<span class="t num">'+esc(r.t)+'</span>':'')+'</td>'}
+function insCell(st,rec){const r=rec[st.id]||{};if(!r.done)return'<td class="empty">—</td>';return'<td><span class="ins">✓ '+esc(r.dose!=null?r.dose:state.settings[st.dose])+' UI</span>'+(r.t?'<span class="t num">'+esc(r.t)+'</span>':'')+'</td>'}
+function timeCell(st,rec){const r=rec[st.id]||{};return r.t?'<td class="num">'+esc(r.t)+'</td>':'<td class="empty">—</td>'}
+function renderHistorico(){
+  const keys=sortedKeys(true);const s=state.settings;
+  let html='<div class="row between"><div class="seg" role="group" aria-label="Modo de exibição"><button type="button" data-hist="dias" aria-pressed="'+(histMode==='dias')+'">Dias</button><button type="button" data-hist="tabela" aria-pressed="'+(histMode==='tabela')+'">Tabela</button></div>'+
+    '<button class="btn sm primary" type="button" data-act="copy-doc">Copiar para o médico</button></div>';
+  if(!keys.length){html+='<div class="card empty-state"><b>Nenhum registro ainda.</b><br>Os dias preenchidos em “Hoje” aparecem aqui no formato da folha.</div>';$('#view').innerHTML=html;return}
+  if(histMode==='tabela'){
+    html+='<div class="scroll"><table class="sheet"><thead>'+
+      '<tr class="grp"><th class="date" rowspan="2">Data</th><th colspan="4">Café da manhã</th><th colspan="3">Almoço</th><th colspan="4">Jantar</th><th colspan="2">Noite</th></tr>'+
+      '<tr class="sub"><th>Insulina</th><th>Jejum<span class="lim">&lt; '+s.metaJejum+'</span></th><th>Café</th><th>1h após<span class="lim">&lt; '+s.metaPos+'</span></th>'+
+      '<th>Antes<span class="lim">&lt; '+s.metaPre+'</span></th><th>Almoço</th><th>1h após<span class="lim">&lt; '+s.metaPos+'</span></th>'+
+      '<th>Antes<span class="lim">&lt; '+s.metaPre+'</span></th><th>Insulina</th><th>Jantar</th><th>1h após<span class="lim">&lt; '+s.metaPos+'</span></th>'+
+      '<th>Dormir</th><th>Madrug.</th></tr></thead><tbody>';
+    keys.forEach(k=>{const rec=state.days[k];
+      html+='<tr data-date="'+k+'" tabindex="0"><td class="date">'+shortDate(k)+'<span class="t">'+fmtDate(k,{weekday:'short'})+'</span></td>'+
+        insCell(STEP_BY_ID.insManha,rec)+cellHTML(STEP_BY_ID.jejum,rec,true)+timeCell(STEP_BY_ID.cafe,rec)+cellHTML(STEP_BY_ID.aposCafe,rec,true)+
+        cellHTML(STEP_BY_ID.preAlmoco,rec,true)+timeCell(STEP_BY_ID.almoco,rec)+cellHTML(STEP_BY_ID.aposAlmoco,rec,true)+
+        cellHTML(STEP_BY_ID.preJantar,rec,true)+insCell(STEP_BY_ID.insJantar,rec)+timeCell(STEP_BY_ID.jantar,rec)+cellHTML(STEP_BY_ID.aposJantar,rec,true)+
+        cellHTML(STEP_BY_ID.dormir,rec,true)+cellHTML(STEP_BY_ID.madrugada,rec,true)+'</tr>'});
+    html+='</tbody></table></div><p class="small muted">Deslize a tabela para o lado. Toque em um dia para editar.</p>';
+  }else{
+    html+='<div class="days">';
+    keys.forEach(k=>{const rec=state.days[k];
+      const dc=(st)=>{const r=rec[st.id]||{};if(r.v==null)return'<div class="cell"><span class="v none">—</span></div>';const stt=statusOf(st,r.v)||'info';return'<div class="cell"><span class="v '+stt+'">'+esc(r.v)+'</span>'+(r.t?'<span class="t num">'+esc(r.t)+'</span>':'')+'</div>'};
+      const tc=(st)=>{const r=rec[st.id]||{};return'<div class="cell"><span class="v '+(r.t?'info':'none')+' num">'+(r.t?esc(r.t):'—')+'</span></div>'};
+      const ins=(st)=>{const r=rec[st.id]||{};return r.done?'✓ '+esc(r.dose!=null?r.dose:s[st.dose])+' UI'+(r.t?' às '+esc(r.t):''):'não registrada'};
+      const cnt={ok:0,high:0,low:0};STEPS.forEach(st=>{if(st.kind!=='measure')return;const stt=statusOf(st,(rec[st.id]||{}).v);if(stt&&cnt[stt]!=null)cnt[stt]++});
+      html+='<button class="day" type="button" data-date="'+k+'"><div class="day-head"><b>'+fmtDate(k,{weekday:'short',day:'numeric',month:'short'})+'</b><span class="chips">'+(cnt.ok?'<span class="chip ok">'+cnt.ok+' na meta</span>':'')+(cnt.high?'<span class="chip high">'+cnt.high+' acima</span>':'')+(cnt.low?'<span class="chip low">'+cnt.low+' baixa</span>':'')+'</span></div>'+
+        '<div class="day-grid"><span></span><span class="hdr">Antes</span><span class="hdr">Refeição</span><span class="hdr">1h após</span>'+
+        '<span class="lbl">Café</span>'+dc(STEP_BY_ID.jejum)+tc(STEP_BY_ID.cafe)+dc(STEP_BY_ID.aposCafe)+
+        '<span class="lbl">Almoço</span>'+dc(STEP_BY_ID.preAlmoco)+tc(STEP_BY_ID.almoco)+dc(STEP_BY_ID.aposAlmoco)+
+        '<span class="lbl">Jantar</span>'+dc(STEP_BY_ID.preJantar)+tc(STEP_BY_ID.jantar)+dc(STEP_BY_ID.aposJantar)+
+        (s.mostrarNoite&&((rec.dormir||{}).v!=null||(rec.madrugada||{}).v!=null)?'<span class="lbl">Noite</span>'+dc(STEP_BY_ID.dormir)+'<div class="cell"><span class="v none">·</span></div>'+dc(STEP_BY_ID.madrugada):'')+
+        '</div><div class="day-foot"><span>Insulina manhã: '+ins(STEP_BY_ID.insManha)+'</span><span>·</span><span>jantar: '+ins(STEP_BY_ID.insJantar)+'</span>'+(rec.obs?'<span>· '+esc(rec.obs)+'</span>':'')+'</div></button>'});
+    html+='</div>';
+  }
+  html+='<div class="legend"><span><i style="background:var(--ok-soft);border:1px solid var(--ok)"></i>na meta</span><span><i style="background:var(--high-soft);border:1px solid var(--high)"></i>acima da meta</span><span><i style="background:var(--low-soft);border:1px solid var(--low)"></i>baixa (&lt; '+s.hipo+')</span></div>';
+  $('#view').innerHTML=html;
+}
+
+/* ====================== texto para o médico ====================== */
+function dayText(k,rec){
+  const s=state.settings;const flag=(st)=>{const r=rec[st.id]||{};if(r.v==null)return'—';const stt=statusOf(st,r.v);return r.v+(stt==='high'?' ↑':stt==='low'?' ↓':'')};
+  const t=(st)=>(rec[st.id]||{}).t||'';
+  const ins=(st)=>{const r=rec[st.id]||{};return r.done?'✓ '+(r.dose!=null?r.dose:s[st.dose])+' UI'+(r.t?' '+r.t:''):'não registrada'};
+  const L=[];
+  L.push(shortDate(k)+' ('+fmtDate(k,{weekday:'short'})+')');
+  L.push('  Jejum '+(t(STEP_BY_ID.jejum)?t(STEP_BY_ID.jejum)+' ':'')+flag(STEP_BY_ID.jejum)+' | Insulina '+ins(STEP_BY_ID.insManha)+' | Café '+(t(STEP_BY_ID.cafe)||'—')+' | 1h após '+flag(STEP_BY_ID.aposCafe));
+  L.push('  Antes almoço '+(t(STEP_BY_ID.preAlmoco)?t(STEP_BY_ID.preAlmoco)+' ':'')+flag(STEP_BY_ID.preAlmoco)+' | Almoço '+(t(STEP_BY_ID.almoco)||'—')+' | 1h após '+flag(STEP_BY_ID.aposAlmoco));
+  L.push('  Antes jantar '+(t(STEP_BY_ID.preJantar)?t(STEP_BY_ID.preJantar)+' ':'')+flag(STEP_BY_ID.preJantar)+' | Insulina '+ins(STEP_BY_ID.insJantar)+' | Jantar '+(t(STEP_BY_ID.jantar)||'—')+' | 1h após '+flag(STEP_BY_ID.aposJantar));
+  if((rec.dormir||{}).v!=null||(rec.madrugada||{}).v!=null)L.push('  Dormir '+flag(STEP_BY_ID.dormir)+' | Madrugada '+flag(STEP_BY_ID.madrugada));
+  if(rec.obs)L.push('  Obs.: '+rec.obs);
+  return L.join('\n');
+}
+function docText(keys){
+  const s=state.settings;
+  const head=['INSULAR — '+(s.nome||'gestante'),'Metas: jejum < '+s.metaJejum+' · antes das refeições < '+s.metaPre+' · 1h após < '+s.metaPos+' mg/dL (↑ acima, ↓ baixa < '+s.hipo+')','Insulina '+s.insulina+': '+s.doseManha+' UI manhã · '+s.doseJantar+' UI jantar',''];
+  return head.concat(keys.map(k=>dayText(k,state.days[k]))).join('\n\n').replace(/\n\n\n/g,'\n\n');
+}
+async function copyText(txt,okMsg){
+  try{await navigator.clipboard.writeText(txt);toast(okMsg||'Copiado!')}
+  catch(e){openSheet(txt)}
+}
+function openSheet(txt){
+  const bg=document.createElement('div');bg.className='sheet-bg';
+  bg.innerHTML='<div class="sheet" role="dialog" aria-label="Texto para copiar"><div class="row between"><b>Selecione e copie</b><button class="btn sm" type="button" data-act="close-sheet">Fechar</button></div><textarea readonly></textarea></div>';
+  bg.querySelector('textarea').value=txt;document.body.appendChild(bg);
+  const ta=bg.querySelector('textarea');ta.focus();ta.select();
+  bg.addEventListener('click',e=>{if(e.target===bg||e.target.closest('[data-act="close-sheet"]'))bg.remove()});
+}
+
+/* ====================== EVOLUÇÃO ====================== */
+function lineChart(o){
+  const W=360,H=210,pl=36,pr=10,pt=14,pb=28;
+  const n=o.labels.length;const xs=i=>n<=1?pl+(W-pl-pr)/2:pl+i*(W-pl-pr)/(n-1);
+  let vals=[];o.series.forEach(s=>s.values.forEach(v=>{if(v!=null)vals.push(v)}));o.targets.forEach(t=>vals.push(t.y));
+  if(!vals.length)vals=[60,160];
+  let ymin=Math.floor((Math.min(...vals)-12)/10)*10,ymax=Math.ceil((Math.max(...vals)+12)/10)*10;
+  if(ymin<30)ymin=30;if(ymax-ymin<60)ymax=ymin+60;
+  const ys=v=>pt+(H-pt-pb)*(1-(v-ymin)/(ymax-ymin));
+  let g='';const step=(ymax-ymin)>=120?40:20;
+  for(let y=ymin;y<=ymax;y+=step){g+='<line x1="'+pl+'" x2="'+(W-pr)+'" y1="'+ys(y).toFixed(1)+'" y2="'+ys(y).toFixed(1)+'" stroke="var(--line)" stroke-width="1"/><text x="'+(pl-6)+'" y="'+(ys(y)+3.5).toFixed(1)+'" text-anchor="end" font-size="10" fill="var(--muted)">'+y+'</text>'}
+  const every=Math.max(1,Math.ceil(n/6));
+  o.labels.forEach((l,i)=>{if(i%every===0||i===n-1)g+='<text x="'+xs(i).toFixed(1)+'" y="'+(H-8)+'" text-anchor="middle" font-size="10" fill="var(--muted)">'+l+'</text>'});
+  o.targets.forEach(t=>{const y=ys(t.y).toFixed(1);g+='<line x1="'+pl+'" x2="'+(W-pr)+'" y1="'+y+'" y2="'+y+'" stroke="'+t.color+'" stroke-width="1.4" stroke-dasharray="5 4"/><text x="'+(W-pr)+'" y="'+(Number(y)-4)+'" text-anchor="end" font-size="10" font-weight="700" fill="'+t.color+'">'+t.label+'</text>'});
+  o.series.forEach(s=>{let d='',pen=false;s.values.forEach((v,i)=>{if(v==null){pen=false;return}d+=(pen?'L':'M')+xs(i).toFixed(1)+' '+ys(v).toFixed(1)+' ';pen=true});
+    if(d)g+='<path d="'+d+'" fill="none" stroke="'+s.color+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+    s.values.forEach((v,i)=>{if(v==null)return;const stt=s.statusOf?s.statusOf(v):null;if(stt==='high'||stt==='low')g+='<circle cx="'+xs(i).toFixed(1)+'" cy="'+ys(v).toFixed(1)+'" r="7" fill="var(--'+stt+'-soft)" stroke="var(--'+stt+')" stroke-width="1.5"/>';
+      g+='<circle cx="'+xs(i).toFixed(1)+'" cy="'+ys(v).toFixed(1)+'" r="3.4" fill="'+s.color+'" stroke="var(--surface)" stroke-width="1.5"/>'})});
+  return'<div class="chart-wrap"><svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="'+esc(o.aria||'gráfico')+'" style="font-family:var(--font-body)">'+g+'</svg></div>'+
+    '<div class="chart-legend">'+o.series.map(s=>'<span><i style="background:'+s.color+'"></i>'+esc(s.name)+'</span>').join('')+'</div>';
+}
+function renderEvolucao(){
+  const s=state.settings;const today=todayKey();const keys=[];for(let i=evoDays-1;i>=0;i--)keys.push(shiftKey(today,-i));
+  const labels=keys.map(k=>k.slice(8,10)+'/'+k.slice(5,7));
+  const measures=STEPS.filter(st=>st.kind==='measure'&&st.target!=='none');
+  let total=0,ok=0,high=0,low=0,jej=[],pos=[];
+  keys.forEach(k=>{const rec=state.days[k]||{};measures.forEach(st=>{const v=(rec[st.id]||{}).v;if(v==null)return;total++;const stt=statusOf(st,v);if(stt==='ok')ok++;else if(stt==='high')high++;else if(stt==='low')low++;if(st.target==='jejum')jej.push(v);if(st.target==='pos')pos.push(v)})});
+  const avg=a=>a.length?Math.round(a.reduce((x,y)=>x+y,0)/a.length):null;
+  let html='<div class="row between"><div class="seg" role="group" aria-label="Período">'+[7,14,30].map(n=>'<button type="button" data-evo="'+n+'" aria-pressed="'+(evoDays===n)+'">'+n+' dias</button>').join('')+'</div></div>';
+  if(!total){html+='<div class="card empty-state"><b>Sem medições nos últimos '+evoDays+' dias.</b><br>Registre as glicemias em “Hoje” para ver a evolução aqui.</div>';$('#view').innerHTML=html;return}
+  const pct=Math.round(ok/total*100);
+  html+='<div class="kpis"><div class="kpi '+(pct>=80?'ok':pct>=60?'':'high')+'"><span class="k num">'+pct+'%</span><span class="l">na meta ('+ok+' de '+total+')</span></div>'+
+    '<div class="kpi '+(high?'high':'')+'"><span class="k num">'+high+'</span><span class="l">acima da meta</span></div>'+
+    '<div class="kpi '+(low?'low':'')+'"><span class="k num">'+low+'</span><span class="l">'+(low===1?'baixa':'baixas')+' (&lt; '+s.hipo+')</span></div>'+
+    '<div class="kpi"><span class="k num">'+(avg(jej)!=null?avg(jej):'—')+'</span><span class="l">média em jejum · 1h após '+(avg(pos)!=null?avg(pos):'—')+'</span></div></div>';
+  const ser=(id,name,color)=>{const st=STEP_BY_ID[id];return{name,color,values:keys.map(k=>{const v=((state.days[k]||{})[id]||{}).v;return v==null?null:v}),statusOf:v=>statusOf(st,v)}};
+  html+='<div class="card"><h2>Jejum e antes das refeições</h2><p class="small muted" style="margin-bottom:6px">mg/dL por dia · linhas tracejadas são as metas</p>'+
+    lineChart({labels,aria:'Glicemias em jejum e antes das refeições',series:[ser('jejum','Jejum','var(--s1)'),ser('preAlmoco','Antes do almoço','var(--s2)'),ser('preJantar','Antes do jantar','var(--s3)')],targets:[{y:s.metaJejum,label:'jejum < '+s.metaJejum,color:'var(--s1)'},{y:s.metaPre,label:'antes < '+s.metaPre,color:'var(--muted)'},{y:s.hipo,label:'baixa < '+s.hipo,color:'var(--low)'}]})+'</div>';
+  html+='<div class="card"><h2>1h após as refeições</h2><p class="small muted" style="margin-bottom:6px">mg/dL por dia · meta &lt; '+s.metaPos+'</p>'+
+    lineChart({labels,aria:'Glicemias 1h após as refeições',series:[ser('aposCafe','Após o café','var(--s1)'),ser('aposAlmoco','Após o almoço','var(--s2)'),ser('aposJantar','Após o jantar','var(--s3)')],targets:[{y:s.metaPos,label:'1h após < '+s.metaPos,color:'var(--high)'},{y:s.hipo,label:'baixa < '+s.hipo,color:'var(--low)'}]})+'</div>';
+  html+='<div class="card"><h2>Na meta, por momento do dia</h2><p class="small muted" style="margin-bottom:10px">onde está o maior desafio</p><div class="moments">';
+  measures.forEach(st=>{let t=0,o=0;keys.forEach(k=>{const v=((state.days[k]||{})[st.id]||{}).v;if(v==null)return;t++;if(statusOf(st,v)==='ok')o++});if(!t)return;const p=Math.round(o/t*100);
+    html+='<div class="moment"><span class="lbl">'+esc(st.label)+'</span><div class="bar"><i style="width:'+p+'%;background:'+(p>=80?'var(--ok)':p>=50?'var(--warn)':'var(--high)')+'"></i></div><span class="pct num">'+p+'% <span class="small" style="font-weight:600">('+o+'/'+t+')</span></span></div>'});
+  html+='</div></div>';
+  $('#view').innerHTML=html;
+}
+
+/* ====================== AJUSTES ====================== */
+function renderStatusLine(){const el=$('#statusLine');if(!el)return;const m=statusInfo();el.className='status-line '+m.cls;el.innerHTML='<span class="dot"></span><span>'+esc(m.text)+'</span>'}
+function statusInfo(){
+  const p=pendingCount();const pend=p?' · '+p+' pendente'+(p>1?'s':''):'';
+  if(!cfg.url)return{cls:'local',text:'Salvando só neste aparelho. Preencha a URL e a senha para gravar na planilha.'};
+  if(sync.state==='syncing')return{cls:'local',text:'Sincronizando com a planilha…'};
+  if(sync.state==='offline')return{cls:'local',text:'Sem internet; os registros ficam guardados e vão para a planilha quando voltar'+pend+'.'};
+  if(sync.state==='error')return{cls:'local',text:'Não consegui gravar na planilha ('+sync.msg+')'+pend+'. Vou tentar de novo.'};
+  if(sync.state==='pending')return{cls:'local',text:'Alterações a enviar para a planilha'+pend+'.'};
+  if(sync.state==='ok')return{cls:'cloud',text:'Planilha sincronizada'+(sync.last?' às '+new Date(sync.last).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'')+pend+'.'};
+  return{cls:'local',text:'Planilha configurada; aguardando a primeira sincronização.'};
+}
+function numField(key,unit,min,max,step){return'<div class="field"><input type="number" inputmode="'+(step&&step<1?'decimal':'numeric')+'" min="'+min+'" max="'+max+'" step="'+(step||1)+'" id="set-'+key+'" data-set="'+key+'" value="'+esc(state.settings[key])+'"><span class="unit">'+unit+'</span></div>'}
+function renderAjustes(){
+  const s=state.settings;const m=statusInfo();
+  let html='<div class="card form"><h2>Gestante</h2>'+
+    '<div class="frow"><label for="set-nome">Nome</label><div class="field"><input type="text" id="set-nome" data-set="nome" value="'+esc(s.nome)+'" maxlength="40"></div></div></div>';
+  html+='<div class="card form"><h2>Insulina</h2>'+
+    '<div class="frow"><label for="set-insulina">Tipo<span class="sub">como está na receita</span></label><div class="field"><input type="text" id="set-insulina" data-set="insulina" value="'+esc(s.insulina)+'" maxlength="20" style="width:90px"></div></div>'+
+    '<div class="frow"><label for="set-doseManha">Dose da manhã</label>'+numField('doseManha','UI',0,200)+'</div>'+
+    '<div class="frow"><label for="set-horaInsManha">Horário previsto<span class="sub">da aplicação da manhã</span></label><div class="field"><input type="time" id="set-horaInsManha" data-set="horaInsManha" value="'+esc(s.horaInsManha||'')+'"></div></div>'+
+    '<div class="frow"><label for="set-doseJantar">Dose do jantar</label>'+numField('doseJantar','UI',0,200)+'</div></div>';
+  html+='<div class="card form"><h2>Taxas de corte (metas)</h2><p class="hr-note">Valores da folha de acompanhamento. Mude somente conforme a orientação do médico.</p>'+
+    '<div class="frow"><label for="set-metaJejum">Jejum<span class="sub">abaixo de</span></label>'+numField('metaJejum','mg/dL',40,300)+'</div>'+
+    '<div class="frow"><label for="set-metaPre">Antes do almoço e do jantar<span class="sub">abaixo de</span></label>'+numField('metaPre','mg/dL',40,300)+'</div>'+
+    '<div class="frow"><label for="set-metaPos">1h após as refeições<span class="sub">abaixo de</span></label>'+numField('metaPos','mg/dL',40,400)+'</div>'+
+    '<div class="frow"><label for="set-hipo">Baixa (hipoglicemia)<span class="sub">alerta quando menor que</span></label>'+numField('hipo','mg/dL',30,120)+'</div>'+
+    '<div class="divider"></div>'+
+    '<div class="frow"><label>Mostrar “Antes de dormir” e “Madrugada”<span class="sub">como na folha, campos opcionais</span></label><button type="button" class="switch" role="switch" aria-checked="'+(s.mostrarNoite?'true':'false')+'" data-set-toggle="mostrarNoite" aria-label="Mostrar medições da noite"></button></div></div>';
+  html+='<div class="card form"><h2>Planilha Google</h2><p class="hr-note">Cole a URL do app da web do script (termina em /exec) e a senha definida no script. Os registros ficam neste aparelho e vão para a planilha automaticamente.</p>'+
+    '<label class="small" for="cfg-url" style="font-weight:700">URL do script</label><div class="field wide"><input type="url" id="cfg-url" data-cfg="url" value="'+esc(cfg.url)+'" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" spellcheck="false"></div>'+
+    '<div class="frow"><label for="cfg-token">Senha do script</label><div class="field"><input type="text" id="cfg-token" data-cfg="token" value="'+esc(cfg.token)+'" autocomplete="off" spellcheck="false" style="width:140px"></div></div>'+
+    '<div class="status-line '+m.cls+'" id="statusLine"><span class="dot"></span><span>'+esc(m.text)+'</span></div>'+
+    '<div class="row"><button class="btn sm primary" type="button" data-act="sync-now">Sincronizar agora</button></div></div>';
+  html+='<div class="card form"><h2>Dados</h2>'+
+    '<div class="row"><button class="btn sm" type="button" data-act="copy-backup">Copiar backup</button><button class="btn sm ghost" type="button" data-act="toggle-restore">Restaurar backup</button></div>'+
+    '<div id="restoreBox" hidden><textarea class="backup" id="restoreText" placeholder="Cole aqui o texto do backup"></textarea><div class="row" style="margin-top:8px"><button class="btn sm primary" type="button" data-act="do-restore">Restaurar (mantém o mais recente de cada dia)</button></div></div>'+
+    '<div class="divider"></div><div class="row between"><span class="small muted">'+Object.keys(state.days).length+' dia(s) registrado(s)</span><span id="wipeBox"><button class="btn sm ghost" type="button" data-act="wipe" style="color:var(--high)">Apagar tudo</button></span></div></div>';
+  html+='<p class="hr-note" style="padding:0 4px">O Insular organiza o registro; ele não substitui a avaliação da equipe médica. Em valores baixos ou muito altos, siga a orientação que você recebeu.</p>';
+  $('#view').innerHTML=html;
+}
+
+/* ====================== events ====================== */
+document.addEventListener('click',e=>{
+  const tab=e.target.closest('.tab');if(tab){setView(tab.dataset.view);return}
+  if(e.target.closest('#prevDay')){currentDate=shiftKey(currentDate,-1);render();return}
+  if(e.target.closest('#nextDay')){currentDate=shiftKey(currentDate,1);render();return}
+  if(e.target.closest('#todayBtn')){currentDate=todayKey();render();return}
+  if(e.target.closest('#dateLabel')){const dp=$('#datePick');try{if(typeof dp.showPicker==='function'){dp.showPicker();return}}catch(err){}dp.style.pointerEvents='auto';dp.style.opacity='0';dp.focus();try{dp.click()}catch(err){}return}
+  const btn=e.target.closest('[data-act]');
+  if(btn){const act=btn.dataset.act;const sid=btn.dataset.step;
+    if(act==='agora'){const st=STEP_BY_ID[sid];setField(currentDate,sid,'t',nowHM());patchAfterChange(sid);if(st.kind==='measure'){const inp=$('#v-'+sid);if(inp&&!inp.value)inp.focus()}return}
+    if(act==='apliquei'){const r=getDay(currentDate)[sid]||{};const now=!r.done;setField(currentDate,sid,'done',now);if(now&&!r.t)setField(currentDate,sid,'t',nowHM());if(now&&r.dose==null)setField(currentDate,sid,'dose',Number(state.settings[STEP_BY_ID[sid].dose]));patchAfterChange(sid);toast(now?'Aplicação registrada':'Aplicação desmarcada');return}
+    if(act==='copy-day'){copyText(docText([currentDate]),'Dia copiado');return}
+    if(act==='clear-day'){const box=btn.parentElement;box.innerHTML='<span class="inline-confirm"><span class="small">Apagar os registros deste dia?</span><button class="btn sm danger" type="button" data-act="clear-day-yes">Sim, apagar</button><button class="btn sm ghost" type="button" data-act="clear-day-no">Cancelar</button></span>';return}
+    if(act==='clear-day-yes'){clearDay(currentDate);render();toast('Dia apagado');return}
+    if(act==='clear-day-no'){render();return}
+    if(act==='copy-doc'){copyText(docText(sortedKeys(false)),'Resumo copiado');return}
+    if(act==='sync-now'){if(!cfg.url){toast('Preencha a URL do script primeiro')}else{clearTimeout(sync.timer);doSync('manual');toast('Sincronizando…')}return}
+    if(act==='copy-backup'){copyText('INSULAR-BACKUP '+JSON.stringify({settings:state.settings,days:state.days}),'Backup copiado');return}
+    if(act==='toggle-restore'){const b=$('#restoreBox');b.hidden=!b.hidden;if(!b.hidden)$('#restoreText').focus();return}
+    if(act==='do-restore'){restoreBackup($('#restoreText').value);return}
+    if(act==='wipe'){$('#wipeBox').innerHTML='<span class="inline-confirm"><span class="small">Apagar todos os registros?</span><button class="btn sm danger" type="button" data-act="wipe-yes">Sim, apagar tudo</button><button class="btn sm ghost" type="button" data-act="wipe-no">Cancelar</button></span>';return}
+    if(act==='wipe-yes'){Object.keys(state.days).forEach(k=>pushDelete(k));state.days={};saveLocal();render();toast('Registros apagados');return}
+    if(act==='wipe-no'){render();return}
+  }
+  const hist=e.target.closest('[data-hist]');if(hist){histMode=hist.dataset.hist;saveLocal();render();return}
+  const evo=e.target.closest('[data-evo]');if(evo){evoDays=Number(evo.dataset.evo);saveLocal();render();return}
+  const tg=e.target.closest('[data-set-toggle]');if(tg){const key=tg.dataset.setToggle;setSetting(key,!state.settings[key]);tg.setAttribute('aria-checked',state.settings[key]?'true':'false');return}
+  const row=e.target.closest('[data-date]');if(row){currentDate=row.dataset.date;setView('hoje');return}
+});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'){const row=e.target.closest&&e.target.closest('tr[data-date]');if(row){currentDate=row.dataset.date;setView('hoje')}}});
+document.addEventListener('input',e=>{
+  const el=e.target;
+  if(el.id==='datePick'){if(/^\d{4}-\d\d-\d\d$/.test(el.value)){currentDate=el.value;render()}return}
+  if(el.dataset&&el.dataset.step&&el.dataset.field==='v'){const sid=el.dataset.step;const v=el.value===''?null:Number(el.value);setField(currentDate,sid,'v',isNaN(v)?null:v);const st=STEP_BY_ID[sid];const box=$('#status-'+sid);if(box)box.innerHTML=statusChipHTML(st,getDay(currentDate)[sid]||{});return}
+  if(el.id==='obs'){clearTimeout(el._t);el._t=setTimeout(()=>setObs(currentDate,el.value.trim()),500);return}
+  if(el.dataset&&el.dataset.cfg){cfg[el.dataset.cfg]=el.value.trim();saveCfg();if(cfg.url&&cfg.token)scheduleSync(1200);else setSyncUI('off');return}
+  if(el.dataset&&el.dataset.set){const key=el.dataset.set;if(el.type==='number'){const v=Number(el.value);if(el.value!==''&&!isNaN(v))setSetting(key,v)}else setSetting(key,el.value);if(key==='nome')renderBrand();return}
+});
+document.addEventListener('change',e=>{
+  const el=e.target;
+  if(el.dataset&&el.dataset.step){const sid=el.dataset.step,f=el.dataset.field;
+    if(f==='t')setField(currentDate,sid,'t',el.value||'');
+    else if(f==='dose'){const v=Number(el.value);setField(currentDate,sid,'dose',el.value===''||isNaN(v)?null:v)}
+    else if(f==='v'){const v=el.value===''?null:Number(el.value);setField(currentDate,sid,'v',isNaN(v)?null:v)}
+    if(document.activeElement===el)el.blur();
+    patchAfterChange(sid);return}
+  if(el.id==='obs'){setObs(currentDate,el.value.trim());return}
+  if(el.dataset&&el.dataset.set&&el.type==='number'){const v=Number(el.value);if(el.value===''||isNaN(v)){el.value=state.settings[el.dataset.set]}else{setSetting(el.dataset.set,v)}if(view==='ajustes'){}return}
+});
+window.addEventListener('hashchange',()=>{const h=location.hash.replace('#','');if(['hoje','historico','evolucao','ajustes'].includes(h)&&h!==view){view=h;render()}});
+function restoreBackup(txt){
+  txt=(txt||'').trim();if(txt.indexOf('INSULAR-BACKUP')===0)txt=txt.slice(14).trim();
+  let o=null;try{o=JSON.parse(txt)}catch(e){}
+  if(!o||typeof o!=='object'||!o.days){toast('Backup inválido. Cole o texto inteiro.');return}
+  let n=0;Object.keys(o.days).forEach(k=>{if(!/^\d{4}-\d\d-\d\d$/.test(k))return;const D=o.days[k],L=state.days[k];if(!D||typeof D!=='object')return;if(!L||(L.updatedAt||0)<(D.updatedAt||0)){state.days[k]=D;delete state.days[k].seed;delete state.deleted[k];n++;pushDay(k)}});
+  if(o.settings&&typeof o.settings==='object'){state.settings=Object.assign({},DEFAULTS,state.settings,o.settings);pushSettings()}
+  saveLocal();render();toast(n+' dia(s) restaurado(s)');
+}
+
+/* ====================== boot ====================== */
+loadLocal();
+(function(){const h=location.hash.replace('#','');if(['hoje','historico','evolucao','ajustes'].includes(h))view=h})();
+render();
+initSync();
+})();
+</script>
+</body>
+</html>
