@@ -1,5 +1,5 @@
 /* Insular — cache para abrir sem internet. Mude o número da versão ao atualizar o app. */
-const CACHE = 'insular-v1';
+const CACHE = 'insular-v2';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {

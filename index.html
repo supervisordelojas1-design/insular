@@ -379,7 +379,7 @@ function loadLocal(){
 function saveLocal(){try{localStorage.setItem(LS_KEY,JSON.stringify({settings:state.settings,days:state.days,deleted:state.deleted,synced:state.synced,settingsSynced:state.settingsSynced,seeded:true,histMode,evoDays}))}catch(e){}}
 
 /* ====================== sincronização com a planilha Google (Apps Script) ====================== */
-const SYNC_URL_DEFAULT='';   // cole aqui a URL do app da web (termina em /exec) — ou configure em Ajustes
+const SYNC_URL_DEFAULT='https://script.google.com/macros/s/AKfycbzz6LuI98u5mwy6uzvUB1ncsrnulDTxeFrjErNBWD296gnWDdKQnNZ5j5ekge-GSfFQLA/exec';   // URL do app da web (Apps Script)
 const SYNC_TOKEN_DEFAULT=''; // a senha fica só em Ajustes (não publicar no repositório)
 const cfg={url:SYNC_URL_DEFAULT,token:SYNC_TOKEN_DEFAULT};
 const sync={state:'off',msg:'',last:0,syncing:false,again:false,timer:null,renderPending:false};
@@ -390,12 +390,12 @@ function pushDelete(k){delete state.days[k];delete state.synced[k];state.deleted
 function pushSettings(){state.settings.updatedAt=Date.now();scheduleSync()}
 function pendingDays(){return Object.keys(state.days).filter(k=>{const r=state.days[k];return hasData(r)&&(r.updatedAt||0)>(state.synced[k]||0)})}
 function pendingCount(){return pendingDays().length+Object.keys(state.deleted).length+((state.settings.updatedAt||0)>(state.settingsSynced||0)?1:0)}
-function scheduleSync(ms){if(!cfg.url){setSyncUI('off');return}clearTimeout(sync.timer);sync.timer=setTimeout(()=>doSync('auto'),ms==null?1500:ms);setSyncUI('pending')}
+function scheduleSync(ms){if(!cfg.url||!cfg.token){setSyncUI('off');return}clearTimeout(sync.timer);sync.timer=setTimeout(()=>doSync('auto'),ms==null?1500:ms);setSyncUI('pending')}
 const FLAT_MAP=[['jejum_hora','jejum','t'],['jejum','jejum','v'],['ins_manha_ui','insManha','dose'],['ins_manha_hora','insManha','t'],['cafe_hora','cafe','t'],['apos_cafe_hora','aposCafe','t'],['apos_cafe','aposCafe','v'],['pre_almoco_hora','preAlmoco','t'],['pre_almoco','preAlmoco','v'],['almoco_hora','almoco','t'],['apos_almoco_hora','aposAlmoco','t'],['apos_almoco','aposAlmoco','v'],['pre_jantar_hora','preJantar','t'],['pre_jantar','preJantar','v'],['ins_jantar_ui','insJantar','dose'],['ins_jantar_hora','insJantar','t'],['jantar_hora','jantar','t'],['apos_jantar_hora','aposJantar','t'],['apos_jantar','aposJantar','v'],['dormir_hora','dormir','t'],['dormir','dormir','v'],['madrugada_hora','madrugada','t'],['madrugada','madrugada','v']];
 function flatten(k,rec){const o={date:k};FLAT_MAP.forEach(m=>{const r=rec[m[1]]||{};if(m[2]==='dose'){o[m[0]]=r.done?(r.dose!=null?r.dose:state.settings[STEP_BY_ID[m[1]].dose]):''}else{const v=r[m[2]];o[m[0]]=(v==null?'':v)}});o.obs=rec.obs||'';o.atualizado_em=rec.updatedAt||Date.now();return o}
 function unflatten(o){const rec={};FLAT_MAP.forEach(m=>{let v=o[m[0]];if(v===''||v==null)return;rec[m[1]]=rec[m[1]]||{};if(m[2]==='dose'){const n=Number(v);if(isNaN(n)){delete rec[m[1]];return}rec[m[1]].done=true;rec[m[1]].dose=n}else if(m[2]==='v'){const n=Number(v);if(isNaN(n))return;rec[m[1]].v=n}else{rec[m[1]].t=String(v)}});Object.keys(rec).forEach(k=>{if(!Object.keys(rec[k]).length)delete rec[k]});if(o.obs)rec.obs=String(o.obs);rec.updatedAt=Number(o.atualizado_em)||0;return rec}
 async function doSync(reason){
-  if(!cfg.url){setSyncUI('off');return}
+  if(!cfg.url||!cfg.token){setSyncUI('off');return}
   if(sync.syncing){sync.again=true;return}
   if(navigator.onLine===false){setSyncUI('offline');return}
   sync.syncing=true;setSyncUI('syncing');
@@ -433,10 +433,10 @@ function applyServer(j){
   if(changed)requestRender();
 }
 function requestRender(){const a=document.activeElement;if(a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA')){sync.renderPending=true}else{sync.renderPending=false;render()}}
-function setSyncUI(st,msg){sync.state=st;sync.msg=msg||'';const dot=$('#syncDot');if(dot){dot.hidden=!cfg.url;dot.className='sync-dot '+st;dot.title=statusInfo().text}renderStatusLine()}
+function setSyncUI(st,msg){sync.state=st;sync.msg=msg||'';const dot=$('#syncDot');if(dot){dot.hidden=!(cfg.url&&cfg.token);dot.className='sync-dot '+st;dot.title=statusInfo().text}renderStatusLine()}
 function initSync(){
   loadCfg();
-  if(cfg.url)doSync('load');else setSyncUI('off');
+  if(cfg.url&&cfg.token)doSync('load');else setSyncUI('off');
   window.addEventListener('online',()=>doSync('online'));
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')doSync('visible')});
   setInterval(()=>{if(document.visibilityState==='visible')doSync('timer')},5*60*1000);
@@ -674,6 +674,7 @@ function renderStatusLine(){const el=$('#statusLine');if(!el)return;const m=stat
 function statusInfo(){
   const p=pendingCount();const pend=p?' · '+p+' pendente'+(p>1?'s':''):'';
   if(!cfg.url)return{cls:'local',text:'Salvando só neste aparelho. Preencha a URL e a senha para gravar na planilha.'};
+  if(!cfg.token)return{cls:'local',text:'Falta a senha da planilha. Digite a senha para começar a gravar.'};
   if(sync.state==='syncing')return{cls:'local',text:'Sincronizando com a planilha…'};
   if(sync.state==='offline')return{cls:'local',text:'Sem internet; os registros ficam guardados e vão para a planilha quando voltar'+pend+'.'};
   if(sync.state==='error')return{cls:'local',text:'Não consegui gravar na planilha ('+sync.msg+')'+pend+'. Vou tentar de novo.'};
@@ -698,7 +699,7 @@ function renderAjustes(){
     '<div class="frow"><label for="set-hipo">Baixa (hipoglicemia)<span class="sub">alerta quando menor que</span></label>'+numField('hipo','mg/dL',30,120)+'</div>'+
     '<div class="divider"></div>'+
     '<div class="frow"><label>Mostrar “Antes de dormir” e “Madrugada”<span class="sub">como na folha, campos opcionais</span></label><button type="button" class="switch" role="switch" aria-checked="'+(s.mostrarNoite?'true':'false')+'" data-set-toggle="mostrarNoite" aria-label="Mostrar medições da noite"></button></div></div>';
-  html+='<div class="card form"><h2>Planilha Google</h2><p class="hr-note">Cole a URL do app da web do script (termina em /exec) e a senha definida no script. Os registros ficam neste aparelho e vão para a planilha automaticamente.</p>'+
+  html+='<div class="card form"><h2>Planilha Google</h2><p class="hr-note">Digite a senha da planilha uma única vez (fica salva neste aparelho). Os registros ficam no celular e vão para a planilha automaticamente.</p>'+
     '<label class="small" for="cfg-url" style="font-weight:700">URL do script</label><div class="field wide"><input type="url" id="cfg-url" data-cfg="url" value="'+esc(cfg.url)+'" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" spellcheck="false"></div>'+
     '<div class="frow"><label for="cfg-token">Senha do script</label><div class="field"><input type="text" id="cfg-token" data-cfg="token" value="'+esc(cfg.token)+'" autocomplete="off" spellcheck="false" style="width:140px"></div></div>'+
     '<div class="status-line '+m.cls+'" id="statusLine"><span class="dot"></span><span>'+esc(m.text)+'</span></div>'+
@@ -727,7 +728,7 @@ document.addEventListener('click',e=>{
     if(act==='clear-day-yes'){clearDay(currentDate);render();toast('Dia apagado');return}
     if(act==='clear-day-no'){render();return}
     if(act==='copy-doc'){copyText(docText(sortedKeys(false)),'Resumo copiado');return}
-    if(act==='sync-now'){if(!cfg.url){toast('Preencha a URL do script primeiro')}else{clearTimeout(sync.timer);doSync('manual');toast('Sincronizando…')}return}
+    if(act==='sync-now'){if(!cfg.url||!cfg.token){toast(cfg.url?'Digite a senha da planilha primeiro':'Preencha a URL do script primeiro')}else{clearTimeout(sync.timer);doSync('manual');toast('Sincronizando…')}return}
     if(act==='copy-backup'){copyText('INSULAR-BACKUP '+JSON.stringify({settings:state.settings,days:state.days}),'Backup copiado');return}
     if(act==='toggle-restore'){const b=$('#restoreBox');b.hidden=!b.hidden;if(!b.hidden)$('#restoreText').focus();return}
     if(act==='do-restore'){restoreBackup($('#restoreText').value);return}
